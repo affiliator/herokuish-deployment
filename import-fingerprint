@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+DEBUG=${DEBUG:-}
+
+function usage()
+{
+    echo "Import remote's ssh fingerprint"
+    echo "WARNING: This does just append your known_hosts file and does not check for duplicate entries."
+    echo ""
+    echo "${0} <hostname> [<port>] [<clear (y/N)>]"
+    echo ""
+}
+
+function clear_known_hosts()
+{
+    # Prevent execution if the variable isn't set
+    local FILE=${SSH_KNOWN_HOSTS:-""}
+
+    if [[ -z ${FILE} ]]; then
+
+        if [[ -n ${DEBUG} ]]; then
+            echo "Clearing ${FILE}"
+        fi
+
+        echo "" > ${FILE}
+    fi
+}
+
+REMOTE_HOST=$1
+REMOTE_PORT=${2:-"22"}
+if [[ -z ${REMOTE_HOST} ]]; then
+	usage
+	exit 1
+fi
+
+# Hack to get the user's directory...
+SSH_DIR=$(eval echo "~/.ssh")
+SSH_KNOWN_HOSTS="${SSH_DIR}/known_hosts"
+if [[ ! -d ${SSH_DIR} ]]; then
+    echo "Creating directory ${SSH_DIR}"
+    mkdir -p ${SSH_DIR}
+fi
+
+CLEAR_FILE=${3:-"n"}
+if [[ ! -f ${SSH_KNOWN_HOSTS} ]]; then
+    echo "${SSH_KNOWN_HOSTS} does not exist, creating blank file"
+
+    # Prevent clearing since it's not existing
+    CLEAR_FILE="n"
+
+    # Clearing the file forces the creation of a new one
+    clear_known_hosts
+fi
+
+if [[ ${CLEAR_FILE} == "y" ]]; then
+    echo "Clearing ${SSH_KNOWN_HOSTS}"
+    clear_known_hosts
+fi
+
+ssh-keyscan -H ${REMOTE_PORT} ${REMOTE_HOST} 1>> ${SSH_KNOWN_HOSTS} 2> /dev/null
+if [[ ${?} -eq 0 ]]; then
+    echo "Fingerprint fetched and added to ${SSH_KNOWN_HOSTS}"
+else
+    echo "Failed to fetch fingerprint, code: ${?}"
+fi

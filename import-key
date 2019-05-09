@@ -1,0 +1,44 @@
+#!/bin/bash
+
+IS_CHILD=${IS_CHILD:-}
+
+function usage()
+{
+    # Suppress in child process
+    if [[ -n ${IS_CHILD} ]]; then
+        return
+    fi
+
+    echo "Write private ssh key to current users id_rsa"
+    echo "You can provide the key in a parameter or the environment variable SSH_PRIVATE_KEY."
+    echo ""
+    echo "Usage: ${0} [<ssh-key>]"
+    echo "Or: SSH_PRIVATE_KEY=\"...\" ${0}"
+    echo ""
+}
+
+SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY:-$1}
+if [[ -z ${SSH_PRIVATE_KEY} ]]; then
+    usage
+    exit 1
+fi
+
+SSH_DIR="~/.ssh"
+if [[ -d ${SSH_DIR} ]]; then
+    echo "Creating ssh directory in users home"
+    mkdir -p ${SSH_DIR}
+else
+    echo "ssh config directory already exists, skipping creation"
+fi
+
+echo "Overriding default id_rsa file"
+echo ${SSH_PRIVATE_KEY} | tr -d '\r' > ~/.ssh/id_rsa
+echo "Key successfully written."
+
+echo "Change mod to 600"
+chmod 600 "${SSH_DIR}/id_rsa"
+
+
+echo "Done."
+
+

@@ -1,0 +1,87 @@
+#!/bin/bash
+#set -e
+
+function usage()
+{
+    echo "Create a fresh git repository and deploy to remote."
+    echo ""
+    echo "${0} <host> <app> [<branch>] [<user>]"
+    echo ""
+}
+
+REMOTE_BRANCH="dokku"
+REMOTE_USER="dokku"
+REMOTE_HOST=$1
+REMOTE_APP=$2
+REMOTE_COMBINED="dokku ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP}"
+
+if [[ -z ${REMOTE_HOST}  || -z ${REMOTE_APP} ]]; then
+    usage
+    exit 1
+fi
+
+if [[ -n ${3} ]]; then
+    echo "Switched branch to: ${3}"
+    REMOTE_BRANCH=${3}
+fi
+
+if [[ -n ${4} ]]; then
+    echo "Switched user to: ${4}"
+    REMOTE_BRANCH=${4}
+fi
+
+if [[ -z $DEBUG ]]; then
+    IS_CHILD="true" bash -c './import-key'
+else
+    echo "Debug enabled, skipping SSH-Key Import"
+fi
+
+git status >/dev/null 2>&1
+last_status=$?
+if [[ ${last_status} -eq 128 ]]; then
+    echo "No git repository found, creating new.."
+    git init
+    echo "Done creating fresh repository"
+elif [[ ${last_status} -eq 0 ]]; then
+    echo "Repository already existing, skipping creation..."
+
+    git checkout ${REMOTE_BRANCH} >/dev/null 2>&1
+    last_status=$?
+    if [[ ${last_status} -eq 1 ]]; then
+        echo "Missing desired branch, creating..."
+        git checkout -b ${REMOTE_BRANCH}
+    elif [[ ${last_status} -eq 0 ]]; then
+        echo "Desired branch ${REMOTE_BRANCH} seems to exist, skipping creation."
+    else
+        echo "Failed to checkout desired branch ${REMOTE_BRANCH}, code: ${last_status}"
+        exit 1
+    fi
+
+else
+    echo "Repository broken, code: ${last_status}"
+    exit
+fi
+
+echo "Checking if remote already added..."
+git remote get-url ${REMOTE_BRANCH}
+if [[ $? -eq 0 ]]; then
+    echo "Remote existing, skipping adding."
+elif [[ $? -eq 128 ]]; then
+    echo "Remote does not exist yet."
+    echo "Adding remote: ${REMOTE_COMBINED}"
+    git remote add $(echo ${REMOTE_COMBINED})
+    add_result=$?
+fi
+
+if [[ -z ${add_result} && ${add_result} -eq 0 ]]; then
+    echo "Remote has been added successfully."
+else
+    echo "Failed to add remote, code: ${add_result}"
+    exit ${add_result}
+fi
+
+# Ensure a failed push will cause pipeline to fail
+set -e
+
+# Push everything to remote
+git push dokku ${REMOTE_BRANCH} -f
